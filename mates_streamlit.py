@@ -456,11 +456,19 @@ elif st.session_state.screen == "resultat_repeticio":
     st.write(f"Encerts: {st.session_state.repeat_correctes}")
     st.write(f"Errors: {st.session_state.repeat_incorrectes}")
 
-    if st.session_state.repeat_errors:
-        st.write("**Errors:**")
-        for prob, sol, user in st.session_state.repeat_errors:
-            st.write(f"{prob} = {sol} (Tu: {user})")
-
     if st.button("Tornar al menú"):
         tornar_al_menu()
         st.rerun()
+
+# ---------------------------------------------------------------------------
+# PEU DE PÀGINA
+# ---------------------------------------------------------------------------
+
+st.markdown(
+    """
+    <div style="text-align: center; color: #888; font-size: 0.85rem; margin-top: 2.5rem;">
+        Fet per <strong>Jordi Lamarca de Sanz</strong>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
