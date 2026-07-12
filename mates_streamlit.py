@@ -30,6 +30,37 @@ def genera_problema(operacio):
     return f"{a} {signe} {b}", resultat
 
 
+def estils_numpad():
+    """
+    Streamlit apila les columnes en vertical per defecte quan la pantalla
+    és estreta (mòbil). Aquest CSS força que la graella del numpad
+    (el contenidor amb key="numpad_grid") es mantingui sempre en 3
+    columnes, també en mòbil.
+    """
+    st.markdown(
+        """
+        <style>
+        .st-key-numpad_grid [data-testid="stHorizontalBlock"],
+        .st-key-numpad_grid [data-testid="stHorizontalBlockGap"] {
+            flex-wrap: nowrap !important;
+            gap: 0.4rem !important;
+        }
+        .st-key-numpad_grid [data-testid="column"],
+        .st-key-numpad_grid [data-testid="stColumn"] {
+            width: auto !important;
+            min-width: 0 !important;
+            flex: 1 1 0 !important;
+        }
+        .st-key-numpad_grid button {
+            font-size: 1.4rem !important;
+            padding: 0.5rem 0 !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def anar_a(pantalla):
     st.session_state.screen = pantalla
 
@@ -65,19 +96,20 @@ def numpad(entry_key):
 
     files = [["7", "8", "9"], ["4", "5", "6"], ["1", "2", "3"], ["⌫", "0", "Envia"]]
     enviat = False
-    for fila in files:
-        cols = st.columns(3)
-        for i, val in enumerate(fila):
-            label = "✅ Envia" if val == "Envia" else val
-            if cols[i].button(label, use_container_width=True, key=f"{entry_key}_{val}"):
-                if val == "⌫":
-                    st.session_state[entry_key] = st.session_state[entry_key][:-1]
-                    st.rerun()
-                elif val == "Envia":
-                    enviat = True
-                else:
-                    st.session_state[entry_key] += val
-                    st.rerun()
+    with st.container(key="numpad_grid"):
+        for fila in files:
+            cols = st.columns(3)
+            for i, val in enumerate(fila):
+                label = "✅ Envia" if val == "Envia" else val
+                if cols[i].button(label, use_container_width=True, key=f"{entry_key}_{val}"):
+                    if val == "⌫":
+                        st.session_state[entry_key] = st.session_state[entry_key][:-1]
+                        st.rerun()
+                    elif val == "Envia":
+                        enviat = True
+                    else:
+                        st.session_state[entry_key] += val
+                        st.rerun()
 
     return enviat
 
@@ -171,6 +203,7 @@ if "screen" not in st.session_state:
     st.session_state.screen = "menu"
 
 st.title("🧮 Pràctica de Matemàtiques")
+estils_numpad()
 activa_dreceres_teclat()
 
 # ---------------------------------------------------------------------------
