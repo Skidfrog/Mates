@@ -42,29 +42,27 @@ def tornar_al_menu():
 
 def numpad(entry_key):
     """
-    Renderitza un teclat numèric tàctil i la pantalla amb l'entrada actual.
-    Retorna True quan l'usuari prem "Envia" (i hi ha alguna xifra introduïda).
-    L'string introduït queda a st.session_state[entry_key].
+    Entrada dual: teclat físic (camp de text dins un formulari, Intro envia)
+    + numpad tàctil (botons). Totes dues escriuen al mateix
+    st.session_state[entry_key]. Retorna True quan s'envia la resposta
+    (per Intro, per clic a "Envia ✅" del formulari, o tocant "Envia" del numpad).
     """
     if entry_key not in st.session_state:
         st.session_state[entry_key] = ""
 
-    st.markdown(
-        f"""
-        <div style="
-            border: 2px solid #ccc; border-radius: 8px;
-            padding: 10px; margin-bottom: 10px;
-            font-size: 28px; text-align: center; min-height: 40px;
-            font-family: monospace;">
-            {st.session_state[entry_key] if st.session_state[entry_key] else '&nbsp;'}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    # --- Entrada per teclat físic (Intro envia el formulari) ---
+    with st.form(f"form_{entry_key}", clear_on_submit=False):
+        st.text_input(
+            "Resposta",
+            key=entry_key,
+            placeholder="Escriu el número o fes servir el numpad...",
+            label_visibility="collapsed",
+        )
+        enviat_teclat = st.form_submit_button("Envia ✅", use_container_width=True)
 
+    # --- Numpad tàctil ---
     files = [["7", "8", "9"], ["4", "5", "6"], ["1", "2", "3"], ["⌫", "0", "Envia"]]
-
-    enviat = False
+    enviat_numpad = False
     for fila in files:
         cols = st.columns(3)
         for i, val in enumerate(fila):
@@ -74,11 +72,77 @@ def numpad(entry_key):
                     st.session_state[entry_key] = st.session_state[entry_key][:-1]
                     st.rerun()
                 elif val == "Envia":
-                    enviat = True
+                    enviat_numpad = True
                 else:
                     st.session_state[entry_key] += val
                     st.rerun()
-    return enviat
+
+    return enviat_teclat or enviat_numpad
+
+
+def avanc_automatic(segons=5):
+    """
+    Passats `segons` segons, fa clic automàticament al botó "Següent ▶️"
+    de la pantalla de feedback (si l'usuari no ho ha fet abans manualment).
+    El temporitzador viu dins l'iframe del component, així que si l'usuari
+    canvia de pantalla abans de temps, aquest iframe desapareix i el
+    temporitzador es cancel·la sol (no hi ha avanços fantasma).
+    """
+    import streamlit.components.v1 as components
+
+    components.html(
+        f"""
+        <script>
+        setTimeout(function() {{
+            const botons = window.parent.document.querySelectorAll('button');
+            for (const b of botons) {{
+                if ((b.innerText || '').includes('Següent')) {{
+                    b.click();
+                    break;
+                }}
+            }}
+        }}, {int(segons * 1000)});
+        </script>
+        """,
+        height=0,
+    )
+
+
+def activa_dreceres_teclat():
+    """
+    Injecta un listener global (una sola vegada) perquè la barra
+    espaiadora sempre, i la tecla Intro quan el focus no és dins d'un
+    camp de text, facin clic al botó principal de la pantalla
+    ("Envia ✅" o "Següent ▶️").
+    """
+    import streamlit.components.v1 as components
+
+    components.html(
+        """
+        <script>
+        (function() {
+            if (window.parent.__matesKbdBound) { return; }
+            window.parent.__matesKbdBound = true;
+            window.parent.document.addEventListener('keydown', function(e) {
+                const tag = (e.target && e.target.tagName ? e.target.tagName : '').toLowerCase();
+                const enFocusInput = (tag === 'input' || tag === 'textarea');
+                if (e.code === 'Space' || (e.code === 'Enter' && !enFocusInput)) {
+                    const botons = window.parent.document.querySelectorAll('button');
+                    for (const b of botons) {
+                        const t = b.innerText || '';
+                        if (t.includes('Envia') || t.includes('Següent')) {
+                            e.preventDefault();
+                            b.click();
+                            break;
+                        }
+                    }
+                }
+            });
+        })();
+        </script>
+        """,
+        height=0,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -89,6 +153,7 @@ if "screen" not in st.session_state:
     st.session_state.screen = "menu"
 
 st.title("🧮 Pràctica de Matemàtiques")
+activa_dreceres_teclat()
 
 # ---------------------------------------------------------------------------
 # MENU PRINCIPAL
@@ -115,26 +180,51 @@ if st.session_state.screen == "menu":
 # ---------------------------------------------------------------------------
 
 elif st.session_state.screen == "problema":
-    st.subheader(f"Resol: {st.session_state.problema}")
+    if "problema_step" not in st.session_state:
+        st.session_state.problema_step = "pregunta"
 
-    if numpad("entry_problema"):
-        text = st.session_state.entry_problema
-        if text != "" and int(text) == st.session_state.resultat:
-            st.success("✅ Correcte!")
-        elif text != "":
-            st.error(f"❌ Incorrecte. Era {st.session_state.resultat}")
-        else:
+    if st.session_state.problema_step == "pregunta":
+        st.subheader(f"Resol: {st.session_state.problema}")
+
+        if numpad("entry_problema"):
+            text = st.session_state.entry_problema
+            if text != "":
+                st.session_state.problema_correcte = int(text) == st.session_state.resultat
+            else:
+                st.session_state.problema_correcte = None  # resposta no vàlida
+            st.session_state.entry_problema = ""
+            st.session_state.problema_step = "feedback"
+            st.rerun()
+
+        st.write("")
+        c1, c2 = st.columns(2)
+        if c1.button("Següent ▶️", key="skip_problema"):
+            st.session_state.problema, st.session_state.resultat = genera_problema(st.session_state.operacio)
+            st.rerun()
+        if c2.button("Tornar al menú"):
+            tornar_al_menu()
+            st.rerun()
+
+    else:  # feedback
+        st.subheader(f"Resol: {st.session_state.problema}")
+        if st.session_state.problema_correcte is None:
             st.warning("⚠️ Resposta no vàlida")
-        st.session_state.entry_problema = ""
+        elif st.session_state.problema_correcte:
+            st.success("✅ Correcte!")
+        else:
+            st.error(f"❌ Incorrecte. Era {st.session_state.resultat}")
 
-    st.write("")
-    c1, c2 = st.columns(2)
-    if c1.button("Nou problema"):
-        st.session_state.problema, st.session_state.resultat = genera_problema(st.session_state.operacio)
-        st.rerun()
-    if c2.button("Tornar al menú"):
-        tornar_al_menu()
-        st.rerun()
+        st.caption("Següent operació en 5 segons... (o prem Espai / Intro / el botó)")
+        avanc_automatic(5)
+
+        c1, c2 = st.columns(2)
+        if c1.button("Següent ▶️"):
+            st.session_state.problema, st.session_state.resultat = genera_problema(st.session_state.operacio)
+            st.session_state.problema_step = "pregunta"
+            st.rerun()
+        if c2.button("Tornar al menú"):
+            tornar_al_menu()
+            st.rerun()
 
 # ---------------------------------------------------------------------------
 # TRIAR OPERACIÓ PER A LA SÈRIE
@@ -210,6 +300,9 @@ elif st.session_state.screen == "serie":
             st.success("✅ Correcte!")
         else:
             st.error(f"❌ Incorrecte. Era {st.session_state.serie_resultat_actual}")
+
+        st.caption("Següent operació en 5 segons... (o prem Espai / Intro / el botó)")
+        avanc_automatic(5)
 
         if st.button("Següent ▶️"):
             del st.session_state.serie_problema_actual
@@ -293,6 +386,9 @@ elif st.session_state.screen == "repeticio":
             st.success("✅ Correcte!")
         else:
             st.error(f"❌ Incorrecte. Era {st.session_state.repeat_resultat_actual}")
+
+        st.caption("Següent operació en 5 segons... (o prem Espai / Intro / el botó)")
+        avanc_automatic(5)
 
         if st.button("Següent ▶️"):
             del st.session_state.repeat_problema_actual
